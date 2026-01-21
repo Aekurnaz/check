@@ -3,58 +3,73 @@ from google import genai
 from PIL import Image
 import os
 
-# --- 1. AYARLAR VE GÜVENLİK ---
-st.set_page_config(page_title="Hızlı Soru Çözücü", layout="centered", page_icon="⚡")
+# --- 1. AYARLAR ---
+# layout="wide" yaparak telefonda kenar boşluklarını kaldırdık (Geniş Açı Hissi)
+st.set_page_config(page_title="Hızlı Çözücü", layout="wide", page_icon="⚡")
 
-# Streamlit Cloud'un "Secrets" kısmından anahtarı çekiyoruz
-# Eğer yerel bilgisayarda test ediyorsan secrets.toml dosyası gerekir veya hata verir.
+# API Anahtarı Kontrolü
 try:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
-    st.error("API Anahtarı bulunamadı! Lütfen Streamlit ayarlarından 'Secrets' kısmına ekleyin.")
+    st.warning("⚠️ API Anahtarı 'Secrets' ayarında bulunamadı. Yerel test için koda eklemelisiniz.")
     st.stop()
 
-# Tasarım İyileştirmeleri (CSS)
+# --- 2. CSS İLE MOBİL ODAKLI TASARIM ---
 st.markdown("""
     <style>
-        .block-container {padding-top: 1rem; padding-bottom: 0rem;}
+        /* Sayfanın üstündeki boşlukları tamamen yok et */
+        .block-container {
+            padding-top: 0rem; 
+            padding-bottom: 0rem; 
+            padding-left: 0.5rem; 
+            padding-right: 0.5rem;
+        }
         header {visibility: hidden;}
         footer {visibility: hidden;}
         
+        /* Cevap Metni Tasarımı */
         .big-answer {
-            font-size: 80px !important;
+            font-size: 60px !important;
             font-weight: 900;
             text-align: center;
             color: #2ecc71;
-            margin: 20px 0;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            word-wrap: break-word;
         }
         
-        /* Yeniden Başlat Butonu */
+        /* Kamera Widget'ını Özelleştirme */
+        /* Kameranın etrafındaki çerçeveyi kaldırıp full ekran hissi verelim */
+        .stCameraInput {
+            width: 100% !important;
+        }
+        
+        /* Buton Tasarımı - Mobil parmak dostu */
         .stButton button {
             width: 100%;
-            height: 150px;
+            height: 100px;
             font-size: 24px;
-            background-color: #f8f9fa;
-            border: 2px dashed #333;
+            font-weight: bold;
+            background-color: #f0f2f6;
+            border: 2px solid #ccc;
+            border-radius: 15px;
             color: #333;
-            border-radius: 12px;
         }
         .stButton button:hover {
             border-color: #2ecc71;
             color: #2ecc71;
-            background-color: #e8f5e9;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. İSTEMCİ BAŞLATMA ---
+# --- 3. İSTEMCİ KURULUMU ---
 try:
     client = genai.Client(api_key=API_KEY)
 except Exception as e:
-    st.error(f"Sunucu Hatası: {e}")
+    st.error(f"Bağlantı Hatası: {e}")
     st.stop()
 
-# --- 3. SAYFA YÖNETİMİ ---
+# --- 4. OTURUM YÖNETİMİ ---
 if 'page' not in st.session_state:
     st.session_state.page = 'camera'
 if 'last_answer' not in st.session_state:
@@ -66,31 +81,50 @@ def reset_app():
 def solve(image_file):
     try:
         img = Image.open(image_file)
-        # Çok net ve kısa cevap isteyen prompt
-        prompt = "Bu görseldeki soruyu çöz. Çıktı olarak SADECE doğru cevabı (Örn: 'A', '42', 'Edirne') yaz. Asla açıklama yapma. Sadece sonucu büyük harfle ver."
+        # Geniş açı fotoğraflarda netlik için Gemini'ye uyarı
+        prompt = """
+        GÖREV: Bu görseldeki soruyu çöz.
+        KURALLAR:
+        1. Çıktı SADECE net cevap olsun (Örn: "A", "42", "Ankara").
+        2. Asla açıklama yapma.
+        3. Merhaba veya giriş cümlesi kurma.
+        4. Sadece sonucu BÜYÜK harflerle yaz.
+        """
         
-        with st.spinner('Zeka çalışıyor...'):
+        with st.spinner('Analiz ediliyor...'):
             response = client.models.generate_content(
-                model='gemini-flash-latest', 
+                model='gemini-1.5-flash', 
                 contents=[prompt, img]
             )
             
-            st.session_state.last_answer = response.text.strip() if response.text else "Bulunamadı"
+            if response.text:
+                st.session_state.last_answer = response.text.strip()
+            else:
+                st.session_state.last_answer = "❓"
+            
             st.session_state.page = 'result'
             st.rerun()
             
     except Exception as e:
         st.error(f"Hata: {e}")
 
-# --- 4. ARAYÜZ AKIŞI ---
+# --- 5. ARAYÜZ AKIŞI ---
 
 if st.session_state.page == 'camera':
-    st.title("📸 Soruyu Göster")
-    pic = st.camera_input("Foto", label_visibility="collapsed")
+    # Telefonda burası tam ekran görünür
+    # Not: Kamera açılınca kullanıcı "Select Device" diyerek Arka Kamerayı seçmelidir.
+    st.markdown("### 📸 Soruyu Çek")
+    pic = st.camera_input("Kamera", label_visibility="collapsed")
+    
     if pic:
         solve(pic)
 
 elif st.session_state.page == 'result':
-    st.title("💡 Sonuç")
+    st.markdown("### 💡 Cevap")
+    st.markdown("---")
+    # Cevabı ekrana bas
     st.markdown(f'<div class="big-answer">{st.session_state.last_answer}</div>', unsafe_allow_html=True)
-    st.button("🔄 Yeni Soru Çek", on_click=reset_app)
+    st.markdown("---")
+    
+    # Geri Dön Butonu
+    st.button("🔄 Yeni Soru", on_click=reset_app)
