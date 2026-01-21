@@ -94,7 +94,7 @@ def solve(image_file):
         
         with st.spinner('...'):
             response = client.models.generate_content(
-                model='gemini-1.5-flash', 
+                model='gemini-flash-latest', 
                 contents=[prompt, img]
             )
             st.session_state.last_answer = response.text.strip() if response.text else "❓"
